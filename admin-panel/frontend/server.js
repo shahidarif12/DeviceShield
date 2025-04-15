@@ -19,6 +19,13 @@ const getEnvVar = (name, defaultValue = null) => {
   return value !== undefined ? value : defaultValue;
 };
 
+// Debug environment variables
+console.log('Environment variables available:', {
+  VITE_FIREBASE_API_KEY: process.env.VITE_FIREBASE_API_KEY ? '[SET]' : '[NOT SET]',
+  VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '[SET]' : '[NOT SET]',
+  VITE_FIREBASE_APP_ID: process.env.VITE_FIREBASE_APP_ID ? '[SET]' : '[NOT SET]'
+});
+
 // Firebase environment variables for client-side
 const firebaseConfig = {
   apiKey: getEnvVar('VITE_FIREBASE_API_KEY', ''),
@@ -26,8 +33,25 @@ const firebaseConfig = {
   appId: getEnvVar('VITE_FIREBASE_APP_ID', '')
 };
 
+// Looks like there might be a problem with the values - let's check and swap if needed
+if (firebaseConfig.projectId && firebaseConfig.projectId.includes(':') && 
+    firebaseConfig.appId && !firebaseConfig.appId.includes(':')) {
+  console.log('Detected likely swapped projectId and appId, fixing...');
+  const temp = firebaseConfig.projectId;
+  firebaseConfig.projectId = firebaseConfig.appId;
+  firebaseConfig.appId = temp;
+}
+
 // Check if we have necessary Firebase config
 const hasFirebaseConfig = firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId;
+
+// Debug the configuration
+console.log('Firebase configuration:', {
+  apiKey: firebaseConfig.apiKey ? '[SET]' : '[NOT SET]',
+  projectId: firebaseConfig.projectId,
+  appId: firebaseConfig.appId ? '[SET]' : '[NOT SET]',
+  configured: hasFirebaseConfig
+});
 
 // Create dynamic firebase config script
 app.get('/firebase-config.js', (req, res) => {
@@ -37,11 +61,13 @@ app.get('/firebase-config.js', (req, res) => {
     window.firebaseConfig = {
       apiKey: "${firebaseConfig.apiKey}",
       authDomain: "${firebaseConfig.projectId}.firebaseapp.com",
-      projectId: "${firebaseConfig.projectId}", 
+      projectId: "${firebaseConfig.projectId}",
+      storageBucket: "${firebaseConfig.projectId}.appspot.com",
       appId: "${firebaseConfig.appId}",
       developmentMode: ${!hasFirebaseConfig}
     };
-    console.log('Firebase config loaded:', window.firebaseConfig.projectId ? 'Configured' : 'Development Mode');
+    console.log('Firebase config:', window.firebaseConfig);
+    console.log('Firebase status:', window.firebaseConfig.projectId ? 'Configured' : 'Development Mode');
   `);
 });
 

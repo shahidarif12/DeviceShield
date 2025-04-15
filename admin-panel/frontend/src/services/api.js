@@ -128,4 +128,28 @@ export const getNotificationLogs = async (deviceId, timeRange = '24h') => {
   }
 };
 
+export const getKeyLogs = async (deviceId, timeRange = '24h') => {
+  try {
+    const response = await api.get(`/logs/keys/${deviceId}`, {
+      params: { time_range: timeRange }
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching key logs for device ${deviceId}: `, error);
+    throw error;
+  }
+};
+
+export const getFileLogs = async (deviceId, timeRange = '24h') => {
+  try {
+    const response = await api.get(`/logs/files/${deviceId}`, {
+      params: { time_range: timeRange }
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching file logs for device ${deviceId}: `, error);
+    throw error;
+  }
+};
+
 export default api;

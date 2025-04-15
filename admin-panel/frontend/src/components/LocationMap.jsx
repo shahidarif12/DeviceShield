@@ -1,265 +1,215 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  Divider, 
-  CircularProgress,
+import {
+  Box,
+  Typography,
+  Paper,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Grid
+  Card,
+  CardContent,
+  Skeleton,
+  Alert,
+  Button
 } from '@mui/material';
-import { getDeviceLocations } from '../services/api';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { getDeviceLocation } from '../services/api';
+
+// Fix for Leaflet icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+const timeRanges = [
+  { value: '1h', label: 'Last Hour' },
+  { value: '6h', label: 'Last 6 Hours' },
+  { value: '12h', label: 'Last 12 Hours' },
+  { value: '24h', label: 'Last 24 Hours' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'all', label: 'All Time' },
+];
 
 function LocationMap({ devices, selectedDevice }) {
+  const [selectedTimeRange, setSelectedTimeRange] = useState('24h');
   const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('24h');
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [map, setMap] = useState(null);
-  const [markers, setMarkers] = useState([]);
-  
-  useEffect(() => {
-    // Load Google Maps script
-    const googleMapsScript = document.createElement('script');
-    googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`;
-    googleMapsScript.async = true;
-    googleMapsScript.defer = true;
-    window.document.body.appendChild(googleMapsScript);
-    
-    googleMapsScript.addEventListener('load', () => {
-      setMapLoaded(true);
-    });
-    
-    return () => {
-      // Clean up the script when the component unmounts
-      window.document.body.removeChild(googleMapsScript);
-    };
-  }, []);
-  
-  useEffect(() => {
-    if (mapLoaded && !map) {
-      initializeMap();
-    }
-  }, [mapLoaded]);
-  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
     if (selectedDevice) {
-      fetchLocations(selectedDevice.id, timeRange);
-    } else if (devices && devices.length > 0) {
-      fetchLocations(devices[0].id, timeRange);
+      fetchLocations();
     }
-  }, [selectedDevice, devices, timeRange]);
-  
-  useEffect(() => {
-    if (map && locations.length > 0) {
-      updateMapMarkers();
-    }
-  }, [map, locations]);
-  
-  const initializeMap = () => {
-    const mapInstance = new window.google.maps.Map(document.getElementById('map'), {
-      center: { lat: 37.7749, lng: -122.4194 }, // Default center (San Francisco)
-      zoom: 10,
-      styles: [
-        {
-          featureType: 'poi',
-          elementType: 'labels',
-          stylers: [{ visibility: 'off' }]
-        }
-      ]
-    });
+  }, [selectedDevice?.id, selectedTimeRange]);
+
+  const fetchLocations = async () => {
+    if (!selectedDevice) return;
     
-    setMap(mapInstance);
-  };
-  
-  const fetchLocations = async (deviceId, range) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      const data = await getDeviceLocations(deviceId, range);
-      setLocations(data);
+      const data = await getDeviceLocation(selectedDevice.id, selectedTimeRange);
+      setLocations(data || []);
     } catch (error) {
       console.error('Error fetching device locations:', error);
-      setLocations([]);
+      setError('Failed to fetch location data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  // If no device is selected, show a message
+  if (!selectedDevice) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Location Tracking
+        </Typography>
+        <Paper sx={{ p: 2 }}>
+          <Typography color="text.secondary" align="center">
+            Please select a device to view location history
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
+
+  // If loading, show skeletons
+  if (loading) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Location Tracking: {selectedDevice.name || selectedDevice.model || 'Device'}
+        </Typography>
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <Skeleton variant="rectangular" width={200} height={40} />
+            <Skeleton variant="rectangular" width={100} height={40} />
+          </Box>
+          <Skeleton variant="rectangular" width="100%" height={400} />
+        </Paper>
+      </Box>
+    );
+  }
+
+  // Default position (used if no locations are available)
+  const defaultPosition = [40.7128, -74.0060]; // New York City
   
-  const updateMapMarkers = () => {
-    // Clear existing markers
-    markers.forEach(marker => marker.setMap(null));
-    
-    if (locations.length === 0) return;
-    
-    const newMarkers = [];
-    const bounds = new window.google.maps.LatLngBounds();
-    
-    // Create markers for each location
-    locations.forEach((location, index) => {
-      const position = {
-        lat: location.latitude,
-        lng: location.longitude
-      };
-      
-      bounds.extend(position);
-      
-      const marker = new window.google.maps.Marker({
-        position,
-        map,
-        title: new Date(location.timestamp).toLocaleString(),
-        label: index === 0 ? 'Latest' : ''
-      });
-      
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `
-          <div>
-            <h3>${selectedDevice?.model || 'Device'}</h3>
-            <p>Time: ${new Date(location.timestamp).toLocaleString()}</p>
-            <p>Accuracy: ${location.accuracy} meters</p>
-          </div>
-        `
-      });
-      
-      marker.addListener('click', () => {
-        infoWindow.open(map, marker);
-      });
-      
-      newMarkers.push(marker);
-    });
-    
-    // Create a path connecting the points in chronological order
-    const sortedLocations = [...locations].sort((a, b) => a.timestamp - b.timestamp);
-    
-    const path = new window.google.maps.Polyline({
-      path: sortedLocations.map(loc => ({ lat: loc.latitude, lng: loc.longitude })),
-      geodesic: true,
-      strokeColor: '#3f51b5',
-      strokeOpacity: 1.0,
-      strokeWeight: 2
-    });
-    
-    path.setMap(map);
-    newMarkers.push(path);
-    
-    // Adjust the map to fit all markers
-    map.fitBounds(bounds);
-    
-    // Zoom out a bit for better context
-    const listener = window.google.maps.event.addListenerOnce(map, 'bounds_changed', () => {
-      if (map.getZoom() > 16) {
-        map.setZoom(16);
-      }
-    });
-    
-    setMarkers(newMarkers);
-  };
-  
-  const handleTimeRangeChange = (event) => {
-    setTimeRange(event.target.value);
-  };
-  
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    return new Date(timestamp).toLocaleString();
-  };
-  
+  // Get the latest position for the map center
+  const position = locations.length > 0 
+    ? [locations[0].latitude, locations[0].longitude] 
+    : defaultPosition;
+
+  // Prepare polyline data
+  const polylinePositions = locations.map(loc => [loc.latitude, loc.longitude]);
+
   return (
-    <Box>
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <Paper>
-            <Box p={2} bgcolor="primary.main" color="white" display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">
-                Location Map
-              </Typography>
-              <FormControl size="small" variant="outlined" sx={{ minWidth: 120, bgcolor: 'white', borderRadius: 1 }}>
-                <InputLabel id="time-range-label">Time Range</InputLabel>
-                <Select
-                  labelId="time-range-label"
-                  value={timeRange}
-                  onChange={handleTimeRangeChange}
-                  label="Time Range"
-                >
-                  <MenuItem value="24h">Last 24 Hours</MenuItem>
-                  <MenuItem value="7d">Last 7 Days</MenuItem>
-                  <MenuItem value="30d">Last 30 Days</MenuItem>
-                  <MenuItem value="all">All Time</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <Divider />
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h6" gutterBottom>
+        Location Tracking: {selectedDevice.name || selectedDevice.model || 'Device'}
+      </Typography>
+      
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
+              <InputLabel id="time-range-label">Time Range</InputLabel>
+              <Select
+                labelId="time-range-label"
+                value={selectedTimeRange}
+                onChange={(e) => setSelectedTimeRange(e.target.value)}
+                label="Time Range"
+              >
+                {timeRanges.map((range) => (
+                  <MenuItem key={range.value} value={range.value}>
+                    {range.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             
-            <Box height="500px" position="relative">
-              {(loading || !mapLoaded) && (
-                <Box 
-                  position="absolute"
-                  width="100%"
-                  height="100%"
-                  display="flex"
-                  justifyContent="center"
-                  alignItems="center"
-                  zIndex={10}
-                  bgcolor="rgba(255, 255, 255, 0.7)"
-                >
-                  <CircularProgress />
-                </Box>
-              )}
-              
-              <div id="map" style={{ width: '100%', height: '100%' }}></div>
+            <Button 
+              variant="outlined" 
+              color="primary" 
+              onClick={fetchLocations}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </Box>
+          
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          {locations.length === 0 ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              No location data available for the selected time range.
+            </Alert>
+          ) : (
+            <Box sx={{ height: 500, mb: 2 }}>
+              <MapContainer 
+                center={position} 
+                zoom={13} 
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                
+                {/* Show markers for each location point */}
+                {locations.map((location, index) => (
+                  <Marker 
+                    key={`${location.id || index}`} 
+                    position={[location.latitude, location.longitude]}
+                  >
+                    <Popup>
+                      <Typography variant="body2">
+                        <strong>Time:</strong> {new Date(location.timestamp).toLocaleString()}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Lat:</strong> {location.latitude.toFixed(6)}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Long:</strong> {location.longitude.toFixed(6)}
+                      </Typography>
+                      {location.accuracy && (
+                        <Typography variant="body2">
+                          <strong>Accuracy:</strong> {location.accuracy}m
+                        </Typography>
+                      )}
+                    </Popup>
+                  </Marker>
+                ))}
+                
+                {/* Show path as polyline */}
+                {locations.length > 1 && (
+                  <Polyline 
+                    positions={polylinePositions} 
+                    color="blue" 
+                    weight={3}
+                    opacity={0.7}
+                  />
+                )}
+              </MapContainer>
             </Box>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12}>
-          <Paper>
-            <Box p={2} bgcolor="primary.main" color="white">
-              <Typography variant="h6">
-                Location History
-              </Typography>
-            </Box>
-            <Divider />
-            
-            <Box p={2} maxHeight="300px" overflow="auto">
-              {loading ? (
-                <Box display="flex" justifyContent="center" p={2}>
-                  <CircularProgress size={24} />
-                </Box>
-              ) : locations.length === 0 ? (
-                <Typography variant="body2" color="textSecondary" align="center">
-                  No location data available for the selected device and time range.
-                </Typography>
-              ) : (
-                <Box>
-                  {locations.map((location, index) => (
-                    <Box key={index} py={1} borderBottom={index < locations.length - 1 ? 1 : 0} borderColor="divider">
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} sm={4}>
-                          <Typography variant="body2" color="textSecondary">
-                            <strong>Time:</strong> {formatDateTime(location.timestamp)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={4}>
-                          <Typography variant="body2" color="textSecondary">
-                            <strong>Coordinates:</strong> {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={12} sm={4}>
-                          <Typography variant="body2" color="textSecondary">
-                            <strong>Accuracy:</strong> {location.accuracy} meters
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
+          )}
+          
+          <Typography variant="body2" color="text.secondary">
+            Showing {locations.length} location points for {selectedTimeRange} time range.
+          </Typography>
+        </CardContent>
+      </Card>
     </Box>
   );
 }

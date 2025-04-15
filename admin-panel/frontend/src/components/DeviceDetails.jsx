@@ -1,230 +1,209 @@
-import React, { useState } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Paper, 
-  Divider, 
-  Grid, 
-  Chip, 
-  Button,
-  Tabs,
-  Tab
+import React, { useState, useEffect } from 'react';
+import {
+  Typography,
+  Box,
+  Paper,
+  Divider,
+  Grid,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  IconButton,
+  Card,
+  CardContent,
+  CardHeader,
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
-import { 
-  Smartphone as SmartphoneIcon, 
-  Battery90 as BatteryIcon,
+import {
+  Info as InfoIcon,
+  Memory as MemoryIcon,
+  PhoneAndroid as PhoneIcon,
   Storage as StorageIcon,
-  Wifi as WifiIcon,
-  Android as AndroidIcon
+  Battery90 as BatteryIcon,
+  SettingsSystemDaydream as SystemIcon,
+  Language as LanguageIcon,
+  SdStorage as SdCardIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
-import { sendCommand } from '../services/api';
+
+import { getDeviceDetails } from '../services/api';
 
 function DeviceDetails({ device }) {
-  const [activeTab, setActiveTab] = useState(0);
-  const [commandLoading, setCommandLoading] = useState(false);
-  
+  const [loading, setLoading] = useState(false);
+  const [details, setDetails] = useState(null);
+
+  useEffect(() => {
+    if (device) {
+      fetchDeviceDetails();
+    }
+  }, [device?.id]);
+
+  const fetchDeviceDetails = async () => {
+    if (!device) return;
+    
+    setLoading(true);
+    try {
+      const data = await getDeviceDetails(device.id);
+      setDetails(data);
+    } catch (error) {
+      console.error('Error fetching device details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!device) {
     return (
-      <Box p={2}>
-        <Typography variant="body1" align="center">
-          Select a device to view details.
+      <Box sx={{ p: 2, mt: 2 }}>
+        <Typography variant="body1" color="text.secondary" align="center">
+          Select a device to view details
         </Typography>
       </Box>
     );
   }
-  
-  // Format last seen time
-  const formatLastSeen = (timestamp) => {
-    if (!timestamp) return 'Never';
-    return new Date(timestamp).toLocaleString();
-  };
-  
-  // Determine if device is online
-  const isDeviceOnline = () => {
-    const lastSeenTime = device.lastSeen || 0;
-    const currentTime = Date.now();
-    const timeDifference = currentTime - lastSeenTime;
-    
-    // Consider device online if seen in the last 15 minutes
-    return timeDifference < 15 * 60 * 1000;
-  };
-  
-  const handleRequestLocation = async () => {
-    try {
-      setCommandLoading(true);
-      await sendCommand(device.id, 'get_location', {});
-    } catch (error) {
-      console.error('Failed to send location request:', error);
-    } finally {
-      setCommandLoading(false);
-    }
-  };
-  
-  const handleSyncLogs = async () => {
-    try {
-      setCommandLoading(true);
-      await sendCommand(device.id, 'sync_logs', {});
-    } catch (error) {
-      console.error('Failed to send sync logs command:', error);
-    } finally {
-      setCommandLoading(false);
-    }
-  };
-  
+
+  // Use either fetched details or the device prop
+  const deviceData = details || device;
+
   return (
-    <Paper sx={{ mb: 3 }}>
-      <Box p={2} bgcolor="primary.main" color="white">
+    <Box sx={{ mt: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">
           Device Details
         </Typography>
+        <Tooltip title="Refresh device details">
+          <IconButton onClick={fetchDeviceDetails} disabled={loading}>
+            {loading ? <CircularProgress size={24} /> : <RefreshIcon />}
+          </IconButton>
+        </Tooltip>
       </Box>
-      <Divider />
-      
-      <Box p={2}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <Box display="flex" alignItems="center" mb={2}>
-              <SmartphoneIcon fontSize="large" sx={{ mr: 2 }} />
-              <Box>
-                <Typography variant="h6">
-                  {device.model || 'Unknown Device'}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {device.manufacturer} | {device.osVersion}
-                </Typography>
-              </Box>
-            </Box>
-            
-            <Typography variant="body2" gutterBottom>
-              <strong>Device ID:</strong> {device.id}
-            </Typography>
-            <Typography variant="body2" gutterBottom>
-              <strong>Last Seen:</strong> {formatLastSeen(device.lastSeen)}
-            </Typography>
-            <Typography variant="body2" gutterBottom>
-              <strong>Status:</strong> 
-              <Chip 
-                label={isDeviceOnline() ? 'Online' : 'Offline'} 
-                color={isDeviceOnline() ? 'success' : 'default'} 
-                size="small" 
-                sx={{ ml: 1 }} 
-              />
-            </Typography>
-          </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <Box display="flex" flexDirection="column" height="100%" justifyContent="center">
-              <Grid container spacing={2}>
-                {device.batteryLevel !== undefined && (
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <BatteryIcon sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        Battery: {device.batteryLevel}%
-                        {device.isCharging && ' (Charging)'}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-                
-                {device.networkType && (
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <WifiIcon sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        Network: {device.networkType}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-                
-                {device.osVersion && (
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <AndroidIcon sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        Android: {device.osVersion}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-                
-                {device.availableStorage !== undefined && (
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <StorageIcon sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        Storage: {Math.round(device.availableStorage / 1024 / 1024)} MB free
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-              </Grid>
-            </Box>
-          </Grid>
+
+      <Grid container spacing={3}>
+        {/* Basic Information */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader 
+              title="Basic Information" 
+              avatar={<InfoIcon color="primary" />}
+            />
+            <Divider />
+            <CardContent>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><PhoneIcon /></ListItemIcon>
+                  <ListItemText primary="Device Name" secondary={deviceData.name || 'Unknown'} />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><InfoIcon /></ListItemIcon>
+                  <ListItemText primary="Manufacturer" secondary={deviceData.manufacturer || 'Unknown'} />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><PhoneIcon /></ListItemIcon>
+                  <ListItemText primary="Model" secondary={deviceData.model || 'Unknown'} />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><SystemIcon /></ListItemIcon>
+                  <ListItemText primary="Android Version" secondary={deviceData.os_version || 'Unknown'} />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><LanguageIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="IP Address" 
+                    secondary={deviceData.ip_address || 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><BatteryIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Battery Level" 
+                    secondary={
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Box sx={{ mr: 1 }}>
+                          {deviceData.battery_level !== undefined ? `${deviceData.battery_level}%` : 'Unknown'}
+                        </Box>
+                        {deviceData.battery_level !== undefined && (
+                          <Chip 
+                            size="small"
+                            color={
+                              deviceData.battery_level > 70 ? 'success' : 
+                              deviceData.battery_level > 30 ? 'warning' : 'error'
+                            }
+                            label={
+                              deviceData.battery_level > 70 ? 'Good' : 
+                              deviceData.battery_level > 30 ? 'Medium' : 'Low'
+                            }
+                          />
+                        )}
+                      </Box>
+                    } 
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
         </Grid>
-      </Box>
-      
-      <Divider />
-      
-      <Box p={2}>
-        <Typography variant="h6" gutterBottom>
-          Quick Actions
-        </Typography>
-        <Box display="flex" flexWrap="wrap" gap={1}>
-          <Button 
-            variant="outlined" 
-            onClick={handleRequestLocation}
-            disabled={commandLoading || !isDeviceOnline()}
-          >
-            Request Location
-          </Button>
-          <Button 
-            variant="outlined" 
-            onClick={handleSyncLogs}
-            disabled={commandLoading || !isDeviceOnline()}
-          >
-            Sync Logs
-          </Button>
-        </Box>
-      </Box>
-      
-      <Divider />
-      
-      <Box>
-        <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-          <Tab label="Recent Activity" />
-          <Tab label="Location History" />
-          <Tab label="Device Info" />
-        </Tabs>
-        
-        <Box p={2}>
-          {activeTab === 0 && (
-            <Box>
-              <Typography variant="body2" color="textSecondary">
-                Recent device activity will be displayed here.
-              </Typography>
-            </Box>
-          )}
-          
-          {activeTab === 1 && (
-            <Box>
-              <Typography variant="body2" color="textSecondary">
-                Location history will be displayed here.
-              </Typography>
-            </Box>
-          )}
-          
-          {activeTab === 2 && (
-            <Box>
-              <Typography variant="body2" color="textSecondary">
-                Detailed device information will be displayed here.
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      </Box>
-    </Paper>
+
+        {/* Hardware Information */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardHeader 
+              title="Hardware Information" 
+              avatar={<MemoryIcon color="primary" />}
+            />
+            <Divider />
+            <CardContent>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><MemoryIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Processor" 
+                    secondary={deviceData.cpu_info || 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><MemoryIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Total RAM" 
+                    secondary={deviceData.total_ram ? `${deviceData.total_ram} MB` : 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><MemoryIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Available RAM" 
+                    secondary={deviceData.available_ram ? `${deviceData.available_ram} MB` : 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><StorageIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Total Storage" 
+                    secondary={deviceData.total_storage ? `${deviceData.total_storage} GB` : 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><StorageIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Available Storage" 
+                    secondary={deviceData.available_storage ? `${deviceData.available_storage} GB` : 'Unknown'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><SdCardIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="SD Card Present" 
+                    secondary={deviceData.has_sd_card ? 'Yes' : 'No'} 
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
   );
 }
 

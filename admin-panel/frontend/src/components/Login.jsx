@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Button, 
@@ -6,14 +6,23 @@ import {
   Typography, 
   Container,
   CircularProgress,
-  Alert
+  Alert,
+  Divider
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { login } from '../services/auth';
 
 function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showDevOption, setShowDevOption] = useState(false);
+
+  // Check if we're in development mode
+  useEffect(() => {
+    setShowDevOption(import.meta.env.DEV === true);
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -32,6 +41,12 @@ function Login({ onLoginSuccess }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDevLogin = () => {
+    // Skip Firebase and directly call the success handler for development
+    localStorage.setItem('auth_token', 'dev-mode-token-123456');
+    onLoginSuccess();
   };
 
   return (
@@ -54,6 +69,8 @@ function Login({ onLoginSuccess }) {
             width: '100%',
           }}
         >
+          <AdminPanelSettingsIcon color="primary" sx={{ fontSize: 60, mb: 2 }} />
+          
           <Typography component="h1" variant="h4" gutterBottom>
             Admin Panel
           </Typography>
@@ -79,6 +96,30 @@ function Login({ onLoginSuccess }) {
           >
             {loading ? 'Signing in...' : 'Sign in with Google'}
           </Button>
+          
+          {showDevOption && (
+            <>
+              <Divider sx={{ width: '100%', my: 3 }}>
+                <Typography variant="caption" color="text.secondary">
+                  DEVELOPMENT ONLY
+                </Typography>
+              </Divider>
+              
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<LockOpenIcon />}
+                onClick={handleDevLogin}
+                fullWidth
+              >
+                Development Login (Skip Auth)
+              </Button>
+              
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                For local development only. Not available in production.
+              </Typography>
+            </>
+          )}
         </Paper>
       </Box>
     </Container>

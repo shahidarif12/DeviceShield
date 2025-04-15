@@ -46,12 +46,16 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd admin-panel/frontend && npm install && npm run dev"
+args = "cd admin-panel/frontend && ./run-express.sh"
 waitForPort = 5000
 
 [deployment]
 run = ["sh", "-c", "cd admin-panel/backend && pip install -r requirements.txt && python main.py"]
 
 [[ports]]
-localPort = 8000
+localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 3000

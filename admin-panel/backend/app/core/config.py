@@ -11,12 +11,19 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
     
+    # Development mode
+    DEV_MODE: bool = os.environ.get("DEV_MODE", "true").lower() in ("true", "1", "t")
+    
     # CORS
     CORS_ORIGINS: List[str] = [
         "http://localhost:5000",
         "http://localhost:3000",
         "http://localhost:8000",
-        "https://device-management-admin.vercel.app"
+        "https://device-management-admin.vercel.app",
+        # Wildcard for Replit domains to support direct previews
+        "https://*.replit.app",
+        "https://*.replit.dev",
+        "https://*.repl.co"
     ]
     
     # Database
@@ -37,6 +44,9 @@ class Settings:
     
     # Firebase
     FIREBASE_CREDENTIALS: Optional[str] = None  # Path to service account JSON file
+    FIREBASE_API_KEY: Optional[str] = os.environ.get("VITE_FIREBASE_API_KEY")
+    FIREBASE_PROJECT_ID: Optional[str] = os.environ.get("VITE_FIREBASE_PROJECT_ID")
+    FIREBASE_APP_ID: Optional[str] = os.environ.get("VITE_FIREBASE_APP_ID")
     
     # Other settings
     TESTING: bool = False

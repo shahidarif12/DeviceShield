@@ -56,7 +56,7 @@
     </p>
     
     <!-- Firebase domain instruction section -->
-    <div id="domain-info" style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404; display: none;">
+    <div id="domain-info" style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404; display: block;">
       <h3 style="margin-top: 0;">Firebase Domain Authorization Required</h3>
       <p>You need to add this Replit domain to your Firebase project's authorized domains:</p>
       <div style="background-color: #f8f9fa; padding: 8px; border-radius: 4px; font-family: monospace; margin: 10px 0;" id="domain-to-add"></div>
@@ -122,6 +122,33 @@
   <script src="/firebase-config.js"></script>
   
   <script>
+    // Check for development mode authentication
+    function checkDevAuth() {
+      const devEmail = localStorage.getItem('dev_auth_email');
+      const timestamp = localStorage.getItem('dev_auth_timestamp');
+      
+      if (devEmail && timestamp) {
+        // Check if the dev auth is still valid (24 hours)
+        const now = Date.now();
+        const authTime = parseInt(timestamp);
+        const oneDay = 24 * 60 * 60 * 1000;
+        
+        if (now - authTime < oneDay) {
+          // Still valid, show as logged in
+          document.getElementById('login-section').style.display = 'none';
+          document.getElementById('user-info').style.display = 'block';
+          document.getElementById('user-email').textContent = devEmail + ' (Development Mode)';
+          document.getElementById('domain-info').style.display = 'none';
+          return true;
+        } else {
+          // Expired, clear it
+          localStorage.removeItem('dev_auth_email');
+          localStorage.removeItem('dev_auth_timestamp');
+        }
+      }
+      return false;
+    }
+    
     // Simple script to check the backend health
     fetch('/health')
       .then(response => response.json())
@@ -144,9 +171,18 @@
             `Firebase configured with project: ${data.projectId}` : 
             'Firebase not configured (development mode)';
             
-        // Initialize Firebase authentication if configured
-        if (hasConfig) {
-          initializeFirebase();
+        // Check if dev auth is active
+        if (!checkDevAuth()) {
+          // Show login form
+          document.getElementById('login-section').style.display = 'block';
+          
+          // Initialize Firebase authentication if configured
+          if (hasConfig) {
+            initializeFirebase();
+          } else {
+            // In pure development mode without Firebase, show the domain info
+            document.getElementById('domain-info').style.display = 'none';
+          }
         }
       })
       .catch(error => {
@@ -237,14 +273,23 @@
           // Hide any previous errors
           errorSection.style.display = 'none';
           
-          // Development mode fallback login
+          // Check development mode or admin123 password which always works in dev mode
           if (window.firebaseConfig.developmentMode || password === 'admin123') {
             console.log('Using development login mode');
+            
+            // Store authentication state in localStorage for persistence
+            localStorage.setItem('dev_auth_email', email || 'dev@example.com');
+            localStorage.setItem('dev_auth_timestamp', Date.now());
+            
             // Simulate successful login
             const userEmail = email || 'dev@example.com';
             document.getElementById('login-section').style.display = 'none';
             document.getElementById('user-info').style.display = 'block';
             document.getElementById('user-email').textContent = userEmail + ' (Development Mode)';
+            
+            // Hide domain info when logged in
+            document.getElementById('domain-info').style.display = 'none';
+            
             return;
           }
           
@@ -259,6 +304,18 @@
         
         // Sign Out
         document.getElementById('sign-out').addEventListener('click', function() {
+          // Clear development mode authentication
+          localStorage.removeItem('dev_auth_email');
+          localStorage.removeItem('dev_auth_timestamp');
+          
+          // If we're in dev mode, just update the UI
+          if (window.firebaseConfig.developmentMode) {
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('user-info').style.display = 'none';
+            return;
+          }
+          
+          // Otherwise, sign out from Firebase
           firebase.auth().signOut()
             .catch(function(error) {
               console.error('Error during sign out:', error);

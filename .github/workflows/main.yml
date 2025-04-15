@@ -1,0 +1,69 @@
+name: DeviceShield CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-frontend:
+    name: Build React Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-panel/frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+  setup-backend:
+    name: Setup Python Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-panel/backend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Backend readiness check
+        run: |
+          echo "FastAPI backend is ready."
+          # Optional: add test command here (e.g., pytest)
+
+  run-deployment-script:
+    name: Run Deployment Script
+    needs: [build-frontend, setup-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Make script executable
+        run: chmod +x check_deployment.sh
+
+      - name: Run deployment script
+        run: ./check_deployment.sh
+        

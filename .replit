@@ -1,0 +1,57 @@
+modules = ["postgresql-16", "nodejs-20", "python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin Panel Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Admin Panel Frontend"
+
+[[workflows.workflow]]
+name = "Admin Panel Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd admin-panel/backend && pip install -r requirements.txt && python main.py"
+waitForPort = 8000
+
+[[workflows.workflow]]
+name = "Admin Panel Frontend"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd admin-panel/frontend && npm install && npm run dev"
+waitForPort = 5000
+
+[deployment]
+run = ["sh", "-c", "cd admin-panel/backend && pip install -r requirements.txt && python main.py"]
+
+[[ports]]
+localPort = 8000
+externalPort = 80

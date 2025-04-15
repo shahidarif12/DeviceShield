@@ -1,52 +1,99 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Button, 
-  Paper, 
-  Typography, 
-  Container,
-  CircularProgress,
-  Alert,
-  Divider
-} from '@mui/material';
-import GoogleIcon from '@mui/icons-material/Google';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import { login } from '../services/auth';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Box, Button, Container, TextField, Typography, Paper, Grid, Divider } from '@mui/material';
+import { signInWithGoogle, signInWithEmail } from '../firebase/auth';
+import { authAPI } from '../services/api';
 
-function Login({ onLoginSuccess }) {
+const Login = () => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [showDevOption, setShowDevOption] = useState(false);
 
-  // Check if we're in development mode
-  useEffect(() => {
-    setShowDevOption(import.meta.env.DEV === true);
-  }, []);
-
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError(null);
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
     
     try {
-      const result = await login();
+      setLoading(true);
+      setError('');
       
-      if (result.success) {
-        onLoginSuccess();
-      } else {
-        setError(result.error || 'Authentication failed');
+      // First try with firebase (if configured)
+      try {
+        const { user } = await signInWithEmail(email, password);
+        
+        // If in development mode, we'll get a special flag
+        if (user.developmentMode) {
+          // Store mock token in localStorage
+          localStorage.setItem('auth_token', `dev-token-${Math.random().toString(36).substring(2)}`);
+          navigate('/');
+          return;
+        }
+        
+        // Get the ID token from Firebase
+        const idToken = await user.getIdToken();
+        
+        // Send this token to our backend
+        const { access_token } = await authAPI.loginWithFirebase(idToken);
+        
+        // Store JWT token in localStorage
+        localStorage.setItem('auth_token', access_token);
+        
+        // Redirect to dashboard
+        navigate('/');
+      } catch (firebaseError) {
+        // If Firebase fails (or not configured), try with direct API login
+        console.log('Firebase auth failed, trying API login:', firebaseError);
+        
+        const { access_token } = await authAPI.login(email, password);
+        localStorage.setItem('auth_token', access_token);
+        navigate('/');
       }
     } catch (err) {
-      setError(err.message || 'An unexpected error occurred');
+      console.error('Login error:', err);
+      setError(err.response?.data?.detail || err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDevLogin = () => {
-    // Skip Firebase and directly call the success handler for development
-    localStorage.setItem('auth_token', 'dev-mode-token-123456');
-    onLoginSuccess();
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const { user, developmentMode } = await signInWithGoogle();
+      
+      // If in development mode, we'll get a special flag
+      if (developmentMode) {
+        // Store mock token in localStorage
+        localStorage.setItem('auth_token', `dev-token-${Math.random().toString(36).substring(2)}`);
+        navigate('/');
+        return;
+      }
+      
+      // Get the ID token from Firebase
+      const idToken = await user.getIdToken();
+      
+      // Send this token to our backend
+      const { access_token } = await authAPI.loginWithFirebase(idToken);
+      
+      // Store JWT token in localStorage
+      localStorage.setItem('auth_token', access_token);
+      
+      // Redirect to dashboard
+      navigate('/');
+    } catch (err) {
+      console.error('Google login error:', err);
+      setError(err.message || 'Google authentication failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,71 +106,76 @@ function Login({ onLoginSuccess }) {
           alignItems: 'center',
         }}
       >
-        <Paper
-          elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%',
-          }}
-        >
-          <AdminPanelSettingsIcon color="primary" sx={{ fontSize: 60, mb: 2 }} />
-          
-          <Typography component="h1" variant="h4" gutterBottom>
-            Admin Panel
+        <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Device Management Admin
           </Typography>
           
-          <Typography variant="subtitle1" gutterBottom sx={{ mb: 3 }}>
-            Enterprise Device Management System
-          </Typography>
-          
-          {error && (
-            <Alert severity="error" sx={{ width: '100%', mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <GoogleIcon />}
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            fullWidth
-            sx={{ mt: 2 }}
-          >
-            {loading ? 'Signing in...' : 'Sign in with Google'}
-          </Button>
-          
-          {showDevOption && (
-            <>
-              <Divider sx={{ width: '100%', my: 3 }}>
-                <Typography variant="caption" color="text.secondary">
-                  DEVELOPMENT ONLY
-                </Typography>
-              </Divider>
-              
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<LockOpenIcon />}
-                onClick={handleDevLogin}
-                fullWidth
-              >
-                Development Login (Skip Auth)
-              </Button>
-              
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                For local development only. Not available in production.
+          <Box component="form" onSubmit={handleEmailLogin} noValidate sx={{ mt: 1 }}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label="Email Address"
+              name="email"
+              autoComplete="email"
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="password"
+              label="Password"
+              type="password"
+              id="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            
+            {error && (
+              <Typography color="error" sx={{ mt: 2 }}>
+                {error}
               </Typography>
-            </>
-          )}
+            )}
+            
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={loading}
+            >
+              Sign In
+            </Button>
+            
+            <Divider sx={{ my: 2 }}>or</Divider>
+            
+            <Button
+              fullWidth
+              variant="outlined"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+            >
+              Sign In with Google
+            </Button>
+            
+            <Grid container sx={{ mt: 2 }}>
+              <Grid item xs>
+                <Typography variant="caption" color="text.secondary">
+                  For development: Use any email with password "admin123"
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
         </Paper>
       </Box>
     </Container>
   );
-}
+};
 
 export default Login;

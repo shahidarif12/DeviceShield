@@ -3,13 +3,17 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-// Placeholder components - these will be replaced with actual components
-const Dashboard = () => <div>Dashboard Coming Soon</div>;
-const Login = () => <div>Login Coming Soon</div>;
+// Import the actual components we created
+import Dashboard from './components/Dashboard';
+import Login from './components/Login';
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Toggle dark mode function to pass to child components
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
   
   const theme = createTheme({
     palette: {
@@ -25,7 +29,8 @@ function App() {
 
   // Protected route wrapper
   const ProtectedRoute = ({ children }) => {
-    if (!isAuthenticated) {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
       return <Navigate to="/login" replace />;
     }
     return children;
@@ -38,7 +43,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={
           <ProtectedRoute>
-            <Dashboard />
+            <Dashboard toggleDarkMode={toggleDarkMode} darkMode={darkMode} />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />

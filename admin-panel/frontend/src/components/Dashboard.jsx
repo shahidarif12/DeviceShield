@@ -1,307 +1,288 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
-  Drawer, 
   AppBar, 
   Toolbar, 
   Typography, 
-  Divider, 
+  IconButton, 
+  Drawer, 
   List, 
   ListItem, 
   ListItemIcon, 
   ListItemText, 
-  IconButton, 
+  Divider, 
   Container, 
+  Grid, 
   Paper, 
-  CssBaseline,
-  Avatar,
-  Menu,
-  MenuItem,
-  Tooltip
+  Button,
+  CircularProgress
 } from '@mui/material';
-import { 
-  Menu as MenuIcon, 
-  ChevronLeft as ChevronLeftIcon, 
-  Dashboard as DashboardIcon, 
-  Devices as DevicesIcon, 
-  Place as PlaceIcon, 
-  ListAlt as ListAltIcon, 
-  Send as SendIcon,
-  Logout as LogoutIcon
+import {
+  Menu as MenuIcon,
+  Dashboard as DashboardIcon,
+  PhoneAndroid as DevicesIcon,
+  Map as MapIcon,
+  History as LogsIcon,
+  Code as CommandIcon,
+  ExitToApp as LogoutIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon
 } from '@mui/icons-material';
-import { styled } from '@mui/material/styles';
-import { logout } from '../services/auth';
-import { useNavigate } from 'react-router-dom';
+import { signOut } from '../firebase/auth';
+import { devicesAPI, authAPI } from '../services/api';
 
-// Components
-import DeviceList from './DeviceList';
-import DeviceDetails from './DeviceDetails';
-import LocationMap from './LocationMap';
-import LogViewer from './LogViewer';
-import CommandCenter from './CommandCenter';
+// Placeholder for device list
+const DeviceList = ({ devices, loading, onSelectDevice }) => {
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
-// API
-import { getDevices } from '../services/api';
+  if (!devices || devices.length === 0) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <Typography variant="body1" color="text.secondary">
+          No devices registered yet
+        </Typography>
+      </Box>
+    );
+  }
 
-const drawerWidth = 240;
+  return (
+    <List>
+      {devices.map((device) => (
+        <ListItem 
+          button 
+          key={device.id} 
+          onClick={() => onSelectDevice(device)}
+          sx={{
+            borderLeft: '4px solid',
+            borderLeftColor: device.status === 'online' ? 'success.main' : 'warning.main',
+          }}
+        >
+          <ListItemIcon>
+            <DevicesIcon color={device.status === 'online' ? 'success' : 'warning'} />
+          </ListItemIcon>
+          <ListItemText 
+            primary={device.name || device.id} 
+            secondary={`Last seen: ${new Date(device.last_seen).toLocaleString()}`} 
+          />
+        </ListItem>
+      ))}
+    </List>
+  );
+};
 
-const AppBarStyled = styled(AppBar, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
-  zIndex: theme.zIndex.drawer + 1,
-  transition: theme.transitions.create(['width', 'margin'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  ...(open && {
-    marginLeft: drawerWidth,
-    width: `calc(100% - ${drawerWidth}px)`,
-    transition: theme.transitions.create(['width', 'margin'], {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-}));
-
-const DrawerStyled = styled(Drawer, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
-  '& .MuiDrawer-paper': {
-    position: 'relative',
-    whiteSpace: 'nowrap',
-    width: drawerWidth,
-    transition: theme.transitions.create('width', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-    boxSizing: 'border-box',
-    ...(!open && {
-      overflowX: 'hidden',
-      transition: theme.transitions.create('width', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.leavingScreen,
-      }),
-      width: theme.spacing(7),
-      [theme.breakpoints.up('sm')]: {
-        width: theme.spacing(9),
-      },
-    }),
-  },
-}));
-
-const sections = [
-  { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-  { id: 'devices', label: 'Devices', icon: <DevicesIcon /> },
-  { id: 'location', label: 'Location Map', icon: <PlaceIcon /> },
-  { id: 'logs', label: 'Log Viewer', icon: <ListAltIcon /> },
-  { id: 'commands', label: 'Command Center', icon: <SendIcon /> },
-];
-
-function Dashboard() {
-  const [open, setOpen] = useState(true);
-  const [activeSection, setActiveSection] = useState('dashboard');
-  const [devices, setDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState(null);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Main Dashboard component
+const Dashboard = ({ toggleDarkMode, darkMode }) => {
   const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedDevice, setSelectedDevice] = useState(null);
 
-  useEffect(() => {
-    fetchDevices();
+  const toggleDrawer = () => {
+    setDrawerOpen(!drawerOpen);
+  };
 
-    // Set up real-time updates or polling
-    const interval = setInterval(fetchDevices, 30000); // Poll every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      localStorage.removeItem('auth_token');
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
 
   const fetchDevices = async () => {
     try {
-      const data = await getDevices();
-      setDevices(data);
-      if (data.length > 0 && !selectedDevice) {
-        setSelectedDevice(data[0]);
-      } else if (selectedDevice) {
-        // Update selected device with latest data
-        const updatedDevice = data.find(device => device.id === selectedDevice.id);
-        if (updatedDevice) {
-          setSelectedDevice(updatedDevice);
-        }
+      setLoading(true);
+      const response = await devicesAPI.getAll();
+      setDevices(response);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching devices:', err);
+      setError('Failed to load devices. Please try again.');
+      
+      // If authentication error, redirect to login
+      if (err.response?.status === 401) {
+        navigate('/login');
       }
-    } catch (error) {
-      console.error('Error fetching devices:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleDrawer = () => {
-    setOpen(!open);
-  };
+  // Check authentication on component mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // Verify token validity
+        await authAPI.verifyToken();
+      } catch (err) {
+        console.error('Auth verification failed:', err);
+        navigate('/login');
+      }
+    };
 
-  const handleUserMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
       navigate('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
+    } else {
+      checkAuth();
+      fetchDevices();
     }
-  };
+  }, [navigate]);
 
-  const renderSection = () => {
-    switch (activeSection) {
-      case 'dashboard':
-        return (
-          <Box>
-            <Typography variant="h5" gutterBottom>
-              Dashboard Overview
-            </Typography>
-            <DeviceList 
-              devices={devices} 
-              selectedDevice={selectedDevice} 
-              onSelectDevice={setSelectedDevice} 
-              loading={loading}
-            />
-            {selectedDevice && <DeviceDetails device={selectedDevice} />}
-          </Box>
-        );
-      case 'devices':
-        return (
-          <Box>
-            <Typography variant="h5" gutterBottom>
-              Manage Devices
-            </Typography>
-            <DeviceList 
-              devices={devices} 
-              selectedDevice={selectedDevice} 
-              onSelectDevice={setSelectedDevice} 
-              loading={loading}
-            />
-            {selectedDevice && <DeviceDetails device={selectedDevice} />}
-          </Box>
-        );
-      case 'location':
-        return <LocationMap devices={devices} selectedDevice={selectedDevice} />;
-      case 'logs':
-        return <LogViewer devices={devices} selectedDevice={selectedDevice} onSelectDevice={setSelectedDevice} />;
-      case 'commands':
-        return <CommandCenter devices={devices} selectedDevice={selectedDevice} onSelectDevice={setSelectedDevice} />;
-      default:
-        return null;
-    }
-  };
+  // Drawer content
+  const drawerContent = (
+    <Box sx={{ width: 250 }} role="presentation">
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h6" noWrap component="div">
+          Admin Panel
+        </Typography>
+        <IconButton onClick={toggleDarkMode} color="inherit">
+          {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+        </IconButton>
+      </Box>
+      <Divider />
+      <List>
+        <ListItem button>
+          <ListItemIcon>
+            <DashboardIcon />
+          </ListItemIcon>
+          <ListItemText primary="Dashboard" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <DevicesIcon />
+          </ListItemIcon>
+          <ListItemText primary="Devices" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <MapIcon />
+          </ListItemIcon>
+          <ListItemText primary="Location Map" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <LogsIcon />
+          </ListItemIcon>
+          <ListItemText primary="Logs" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <CommandIcon />
+          </ListItemIcon>
+          <ListItemText primary="Commands" />
+        </ListItem>
+      </List>
+      <Divider />
+      <List>
+        <ListItem button onClick={handleLogout}>
+          <ListItemIcon>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText primary="Logout" />
+        </ListItem>
+      </List>
+    </Box>
+  );
 
   return (
     <Box sx={{ display: 'flex' }}>
-      <CssBaseline />
-      <AppBarStyled position="absolute" open={open}>
-        <Toolbar
-          sx={{
-            pr: '24px', // keep right padding when drawer closed
-          }}
-        >
+      <AppBar position="fixed">
+        <Toolbar>
           <IconButton
-            edge="start"
             color="inherit"
             aria-label="open drawer"
+            edge="start"
             onClick={toggleDrawer}
-            sx={{
-              marginRight: '36px',
-              ...(open && { display: 'none' }),
-            }}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            component="h1"
-            variant="h6"
-            color="inherit"
-            noWrap
-            sx={{ flexGrow: 1 }}
-          >
-            Enterprise Device Management
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+            Device Management
           </Typography>
-          <Tooltip title="Account settings">
-            <IconButton color="inherit" onClick={handleUserMenuOpen}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>A</Avatar>
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleUserMenuClose}
-            onClick={handleUserMenuClose}
-          >
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon>
-                <LogoutIcon fontSize="small" />
-              </ListItemIcon>
-              Logout
-            </MenuItem>
-          </Menu>
+          <Button color="inherit" onClick={handleLogout}>
+            Logout
+          </Button>
         </Toolbar>
-      </AppBarStyled>
-      <DrawerStyled variant="permanent" open={open}>
-        <Toolbar
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            px: [1],
-          }}
-        >
-          <IconButton onClick={toggleDrawer}>
-            <ChevronLeftIcon />
-          </IconButton>
-        </Toolbar>
-        <Divider />
-        <List component="nav">
-          {sections.map((section) => (
-            <ListItem 
-              button 
-              key={section.id} 
-              onClick={() => setActiveSection(section.id)}
-              selected={activeSection === section.id}
-            >
-              <ListItemIcon>
-                {section.icon}
-              </ListItemIcon>
-              <ListItemText primary={section.label} />
-            </ListItem>
-          ))}
-        </List>
-      </DrawerStyled>
+      </AppBar>
+      
+      <Drawer
+        anchor="left"
+        open={drawerOpen}
+        onClose={toggleDrawer}
+      >
+        {drawerContent}
+      </Drawer>
+      
       <Box
         component="main"
         sx={{
-          backgroundColor: (theme) =>
-            theme.palette.mode === 'light'
-              ? theme.palette.grey[100]
-              : theme.palette.grey[900],
           flexGrow: 1,
-          height: '100vh',
-          overflow: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
+          p: 3,
+          width: '100%',
+          mt: 8
         }}
       >
-        <Toolbar />
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4, flex: 1 }}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 200px)' }}>
-            {renderSection()}
-          </Paper>
+        <Container maxWidth="lg">
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Device Overview
+                </Typography>
+                {error && (
+                  <Typography color="error" sx={{ mb: 2 }}>
+                    {error}
+                  </Typography>
+                )}
+                <DeviceList 
+                  devices={devices} 
+                  loading={loading} 
+                  onSelectDevice={(device) => setSelectedDevice(device)} 
+                />
+              </Paper>
+            </Grid>
+            
+            {selectedDevice && (
+              <Grid item xs={12}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="h5" component="h2" gutterBottom>
+                    Selected Device: {selectedDevice.name || selectedDevice.id}
+                  </Typography>
+                  <Typography variant="body1">
+                    Device details will be displayed here
+                  </Typography>
+                </Paper>
+              </Grid>
+            )}
+            
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Device Management System
+                </Typography>
+                <Typography variant="body1">
+                  The device management system is still under development. More features will be added soon.
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
         </Container>
       </Box>
     </Box>
   );
-}
+};
 
 export default Dashboard;

@@ -45,14 +45,38 @@
     <h1>Enterprise Device Management System</h1>
     <h2>Admin Panel Frontend</h2>
     <div class="status">Server is running successfully!</div>
+    <div id="firebase-status" class="status" style="background-color: #e3f2fd; color: #1565c0; margin-top: 10px;">
+      Checking Firebase configuration...
+    </div>
     <p>
       This is a placeholder page for the Admin Panel Frontend. The React application will be properly configured and running soon.
     </p>
     <p>
       Please check the console for more information.
     </p>
+    
+    <!-- Firebase login section -->
+    <div id="login-section" style="margin-top: 20px; display: none;">
+      <button id="google-sign-in" style="background-color: #4285F4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+        Sign in with Google
+      </button>
+    </div>
+    
+    <div id="user-info" style="margin-top: 20px; display: none;">
+      <p>Signed in as: <span id="user-email"></span></p>
+      <button id="sign-out" style="background-color: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+        Sign Out
+      </button>
+    </div>
   </div>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  
+  <!-- Load Firebase configuration from our server -->
+  <script src="/firebase-config.js"></script>
+  
   <script>
     // Simple script to check the backend health
     fetch('/health')
@@ -63,6 +87,83 @@
       .catch(error => {
         console.error('Error checking server health:', error);
       });
+    
+    // Check Firebase status
+    fetch('/firebase-status')
+      .then(response => response.json())
+      .then(data => {
+        console.log('Firebase configuration status:', data);
+        const hasConfig = data.configured;
+        
+        document.getElementById('firebase-status').textContent = 
+          hasConfig ? 
+            `Firebase configured with project: ${data.projectId}` : 
+            'Firebase not configured (development mode)';
+            
+        // Initialize Firebase authentication if configured
+        if (hasConfig) {
+          initializeFirebase();
+        }
+      })
+      .catch(error => {
+        console.error('Error checking Firebase status:', error);
+        document.getElementById('firebase-status').textContent = 'Error checking Firebase configuration';
+      });
+      
+    // Firebase Auth Implementation
+    function initializeFirebase() {
+      try {
+        // Initialize Firebase
+        firebase.initializeApp({
+          apiKey: window.firebaseConfig.apiKey,
+          authDomain: window.firebaseConfig.authDomain || `${window.firebaseConfig.projectId}.firebaseapp.com`,
+          projectId: window.firebaseConfig.projectId,
+          appId: window.firebaseConfig.appId
+        });
+        
+        console.log('Firebase initialized successfully');
+        
+        // Auth state observer
+        firebase.auth().onAuthStateChanged(function(user) {
+          const loginSection = document.getElementById('login-section');
+          const userInfoSection = document.getElementById('user-info');
+          
+          if (user) {
+            // User is signed in
+            console.log('User is signed in:', user.email);
+            document.getElementById('user-email').textContent = user.email;
+            loginSection.style.display = 'none';
+            userInfoSection.style.display = 'block';
+          } else {
+            // User is signed out
+            console.log('User is signed out');
+            loginSection.style.display = 'block';
+            userInfoSection.style.display = 'none';
+          }
+        });
+        
+        // Google Sign In
+        document.getElementById('google-sign-in').addEventListener('click', function() {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          firebase.auth().signInWithPopup(provider)
+            .catch(function(error) {
+              console.error('Error during sign in:', error);
+              alert('Sign in failed: ' + error.message);
+            });
+        });
+        
+        // Sign Out
+        document.getElementById('sign-out').addEventListener('click', function() {
+          firebase.auth().signOut()
+            .catch(function(error) {
+              console.error('Error during sign out:', error);
+            });
+        });
+      } catch (e) {
+        console.error('Firebase initialization error:', e);
+        document.getElementById('firebase-status').textContent = 'Firebase initialization failed: ' + e.message;
+      }
+    }
   </script>
 </body>
 </html>

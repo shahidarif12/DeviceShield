@@ -1,155 +1,137 @@
 import axios from 'axios';
-import { getToken } from '../firebase/auth';
 
-// Create axios instance with base URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-
+// Create axios instance
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add request interceptor for authentication
+// Add a request interceptor to include the auth token
 api.interceptors.request.use(
-  async (config) => {
-    // Get token from Firebase auth
-    const token = await getToken();
-    
-    // If token exists, add to headers
+  (config) => {
+    const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
-    
     return config;
   },
+  (error) => Promise.reject(error)
+);
+
+// Add a response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => response,
   (error) => {
+    // Handle unauthorized error (redirect to login)
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );
 
-// API functions
-export const login = async (firebaseToken) => {
-  try {
-    const response = await api.post('/auth/login-firebase', { token: firebaseToken });
+// Define API methods
+export const authAPI = {
+  login: async (username, password) => {
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+    
+    const response = await api.post('/auth/login', formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
     return response.data;
-  } catch (error) {
-    console.error('Error logging in: ', error);
-    throw error;
-  }
+  },
+  
+  loginWithFirebase: async (firebaseToken) => {
+    const response = await api.post('/auth/firebase-login', { token: firebaseToken });
+    return response.data;
+  },
+  
+  verifyToken: async () => {
+    const response = await api.get('/auth/verify');
+    return response.data;
+  },
 };
 
-export const getAllDevices = async () => {
-  try {
+export const devicesAPI = {
+  getAll: async () => {
     const response = await api.get('/devices');
     return response.data;
-  } catch (error) {
-    console.error('Error fetching devices: ', error);
-    throw error;
-  }
-};
-
-export const getDeviceDetails = async (deviceId) => {
-  try {
+  },
+  
+  getById: async (deviceId) => {
     const response = await api.get(`/devices/${deviceId}`);
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getDeviceLocation = async (deviceId, timeRange = '24h') => {
-  try {
+  },
+  
+  update: async (deviceId, data) => {
+    const response = await api.put(`/devices/${deviceId}`, data);
+    return response.data;
+  },
+  
+  getLocationHistory: async (deviceId, timeRange = '24h', limit = 50) => {
     const response = await api.get(`/devices/${deviceId}/locations`, {
-      params: { time_range: timeRange }
+      params: { time_range: timeRange, limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching location for device ${deviceId}: `, error);
-    throw error;
-  }
+  },
 };
 
-export const sendCommand = async (deviceId, command) => {
-  try {
-    const response = await api.post(`/commands/${deviceId}`, command);
+export const commandsAPI = {
+  send: async (deviceId, command) => {
+    const response = await api.post(`/devices/${deviceId}/commands`, command);
     return response.data;
-  } catch (error) {
-    console.error(`Error sending command to device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getCommandHistory = async (deviceId) => {
-  try {
-    const response = await api.get(`/commands/${deviceId}`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching command history for device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getSmsLogs = async (deviceId, timeRange = '24h') => {
-  try {
-    const response = await api.get(`/logs/sms/${deviceId}`, {
-      params: { time_range: timeRange }
+  },
+  
+  getHistory: async (deviceId, limit = 50) => {
+    const response = await api.get(`/devices/${deviceId}/commands`, {
+      params: { limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching SMS logs for device ${deviceId}: `, error);
-    throw error;
-  }
+  },
 };
 
-export const getCallLogs = async (deviceId, timeRange = '24h') => {
-  try {
-    const response = await api.get(`/logs/calls/${deviceId}`, {
-      params: { time_range: timeRange }
+export const logsAPI = {
+  getSmsLogs: async (deviceId, timeRange = '24h', limit = 100) => {
+    const response = await api.get(`/logs/${deviceId}/sms`, {
+      params: { time_range: timeRange, limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching call logs for device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getNotificationLogs = async (deviceId, timeRange = '24h') => {
-  try {
-    const response = await api.get(`/logs/notifications/${deviceId}`, {
-      params: { time_range: timeRange }
+  },
+  
+  getCallLogs: async (deviceId, timeRange = '24h', limit = 100) => {
+    const response = await api.get(`/logs/${deviceId}/calls`, {
+      params: { time_range: timeRange, limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching notification logs for device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getKeyLogs = async (deviceId, timeRange = '24h') => {
-  try {
-    const response = await api.get(`/logs/keys/${deviceId}`, {
-      params: { time_range: timeRange }
+  },
+  
+  getNotificationLogs: async (deviceId, timeRange = '24h', limit = 100) => {
+    const response = await api.get(`/logs/${deviceId}/notifications`, {
+      params: { time_range: timeRange, limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching key logs for device ${deviceId}: `, error);
-    throw error;
-  }
-};
-
-export const getFileLogs = async (deviceId, timeRange = '24h') => {
-  try {
-    const response = await api.get(`/logs/files/${deviceId}`, {
-      params: { time_range: timeRange }
+  },
+  
+  getKeyLogs: async (deviceId, timeRange = '24h', limit = 100) => {
+    const response = await api.get(`/logs/${deviceId}/keys`, {
+      params: { time_range: timeRange, limit },
     });
     return response.data;
-  } catch (error) {
-    console.error(`Error fetching file logs for device ${deviceId}: `, error);
-    throw error;
-  }
+  },
+  
+  getFileLogs: async (deviceId, timeRange = '24h', limit = 100) => {
+    const response = await api.get(`/logs/${deviceId}/files`, {
+      params: { time_range: timeRange, limit },
+    });
+    return response.data;
+  },
 };
 
 export default api;

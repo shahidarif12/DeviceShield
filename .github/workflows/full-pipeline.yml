@@ -1,61 +1,69 @@
-yaml name: DeviceShield CI/CD
+name: DeviceShield CI/CD
 
-on: push: branches: [main] pull_request: branches: [main]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
-jobs: build-frontend: name: Build React Frontend runs-on: ubuntu-latest defaults: run: working-directory: admin-panel/frontend
+jobs:
+  build-frontend:
+    name: Build React Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-panel/frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-yaml
-Copy
-Edit
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
 
-  - name: Set up Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: 18
+      - name: Install Node.js dependencies
+        run: npm install
 
-  - name: Install Node.js dependencies
-    run: npm install
+      - name: Build React App
+        run: npm run build
 
-  - name: Build React App
-    run: npm run build
-setup-backend: name: Setup Python Backend runs-on: ubuntu-latest defaults: run: working-directory: admin-panel/backend
+  setup-backend:
+    name: Setup Python Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-panel/backend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-yaml
-Copy
-Edit
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
 
-  - name: Set up Python
-    uses: actions/setup-python@v4
-    with:
-      python-version: 3.11
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-  - name: Install Python dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
+      - name: Backend Test Placeholder
+        run: |
+          echo "FastAPI backend is ready for testing."
+          # Add pytest or other backend tests here
 
-  - name: Backend Test Placeholder
-    run: |
-      echo "FastAPI backend is ready for testing."
-      # Optional: pytest or unit tests can be added here
-run-deployment-script: name: Run Deployment Script (Optional) needs: [build-frontend, setup-backend] runs-on: ubuntu-latest
+  run-deployment-script:
+    name: Run Deployment Script (Optional)
+    needs: [build-frontend, setup-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-yaml
-Copy
-Edit
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v3
+      - name: Make Deployment Script Executable
+        run: chmod +x check_deployment.sh
 
-  - name: Make Deployment Script Executable
-    run: chmod +x check_deployment.sh
-
-  - name: Run Deployment Script
-    run: ./check_deployment.sh
-
+      - name: Run Deployment Script
+        run: ./check_deployment.sh
+        

@@ -68,6 +68,11 @@ app.get('/firebase-config.js', (req, res) => {
     };
     console.log('Firebase config:', window.firebaseConfig);
     console.log('Firebase status:', window.firebaseConfig.projectId ? 'Configured' : 'Development Mode');
+    
+    // Display information about necessary Firebase console configuration
+    console.warn('IMPORTANT: You need to add the Replit domain to Firebase authorized domains');
+    console.warn('Please go to Firebase Console > Authentication > Settings > Authorized domains');
+    console.warn('Add the current domain: ' + window.location.hostname);
   `);
 });
 

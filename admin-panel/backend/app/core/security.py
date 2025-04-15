@@ -51,6 +51,22 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 async def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify Firebase ID token and return user info."""
+    # Check for development token
+    if token.startswith("dev_token_"):
+        # In development mode, allow a special format token: dev_token_email@example.com
+        # This is only for development and testing, not for production use
+        if settings.DEV_MODE:
+            email = token.replace("dev_token_", "")
+            # Create a mock user object with development data
+            return {
+                "uid": f"dev-uid-{hash(email) % 10000}",
+                "email": email,
+                "email_verified": True,
+                "name": email.split('@')[0].replace('.', ' ').title(),
+                "is_development": True
+            }
+        return None  # Don't allow dev tokens in production
+
     try:
         # Verify token with Firebase Admin SDK
         decoded_token = await verify_id_token(token)
@@ -64,6 +80,17 @@ async def verify_firebase_token(token: str) -> Optional[Dict[str, Any]]:
         return user_info
     except Exception as e:
         print(f"Firebase token verification error: {e}")
+        
+        # In development mode, you can decide whether to allow fallback login
+        if settings.DEV_MODE and "Firebase app not initialized" in str(e):
+            print("Using development fallback due to Firebase initialization issue")
+            return {
+                "uid": "dev-uid-12345",
+                "email": "dev-admin@example.com",
+                "email_verified": True,
+                "name": "Development Admin",
+                "is_development": True
+            }
         return None
 
 

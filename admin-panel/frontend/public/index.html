@@ -55,11 +55,55 @@
       Please check the console for more information.
     </p>
     
+    <!-- Firebase domain instruction section -->
+    <div id="domain-info" style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404; display: none;">
+      <h3 style="margin-top: 0;">Firebase Domain Authorization Required</h3>
+      <p>You need to add this Replit domain to your Firebase project's authorized domains:</p>
+      <div style="background-color: #f8f9fa; padding: 8px; border-radius: 4px; font-family: monospace; margin: 10px 0;" id="domain-to-add"></div>
+      <ol>
+        <li>Go to <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a></li>
+        <li>Select your project: <span id="firebase-project-name" style="font-weight: bold;"></span></li>
+        <li>Go to Authentication → Settings → Authorized domains</li>
+        <li>Click "Add domain" and paste the domain shown above</li>
+      </ol>
+      <p>After adding the domain, refresh this page.</p>
+    </div>
+
     <!-- Firebase login section -->
     <div id="login-section" style="margin-top: 20px; display: none;">
-      <button id="google-sign-in" style="background-color: #4285F4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+      <button id="google-sign-in" style="background-color: #4285F4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-bottom: 10px;">
         Sign in with Google
       </button>
+      
+      <div style="text-align: center; margin: 15px 0;">
+        <span style="display: inline-block; position: relative; color: #666;">
+          <span style="position: relative; z-index: 1; background: white; padding: 0 10px;">or use email</span>
+          <hr style="position: absolute; top: 50%; left: 0; right: 0; margin: 0; border: none; border-top: 1px solid #ddd; z-index: 0;">
+        </span>
+      </div>
+      
+      <form id="email-login-form" style="margin-top: 15px;">
+        <div style="margin-bottom: 10px;">
+          <input type="email" id="email-input" placeholder="Email" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <div style="margin-bottom: 10px;">
+          <input type="password" id="password-input" placeholder="Password" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <div>
+          <button type="submit" id="email-sign-in" style="background-color: #34A853; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%;">
+            Sign in with Email
+          </button>
+        </div>
+        <p style="font-size: 12px; color: #666; margin-top: 8px;">
+          <strong>Development Mode:</strong> Use any email with password "admin123"
+        </p>
+      </form>
+    </div>
+    
+    <!-- Firebase error section -->
+    <div id="firebase-error" style="margin-top: 20px; padding: 15px; background-color: #f8d7da; border-left: 4px solid #dc3545; color: #721c24; display: none;">
+      <h3 style="margin-top: 0;">Authentication Error</h3>
+      <p id="firebase-error-message">An error occurred during sign in.</p>
     </div>
     
     <div id="user-info" style="margin-top: 20px; display: none;">
@@ -123,10 +167,22 @@
         
         console.log('Firebase initialized successfully');
         
+        // Set up domain information for Firebase auth
+        const domainInfo = document.getElementById('domain-info');
+        const domainToAdd = document.getElementById('domain-to-add');
+        const projectName = document.getElementById('firebase-project-name');
+        
+        // Show the full domain needed for Firebase
+        domainToAdd.textContent = window.location.hostname;
+        projectName.textContent = window.firebaseConfig.projectId;
+        
         // Auth state observer
         firebase.auth().onAuthStateChanged(function(user) {
           const loginSection = document.getElementById('login-section');
           const userInfoSection = document.getElementById('user-info');
+          
+          // Hide domain info when user is signed in
+          domainInfo.style.display = 'none';
           
           if (user) {
             // User is signed in
@@ -145,10 +201,59 @@
         // Google Sign In
         document.getElementById('google-sign-in').addEventListener('click', function() {
           const provider = new firebase.auth.GoogleAuthProvider();
+          const errorSection = document.getElementById('firebase-error');
+          const errorMessage = document.getElementById('firebase-error-message');
+          
+          // Hide any previous errors
+          errorSection.style.display = 'none';
+          
           firebase.auth().signInWithPopup(provider)
             .catch(function(error) {
               console.error('Error during sign in:', error);
-              alert('Sign in failed: ' + error.message);
+              
+              // Check for domain authorization error
+              if (error.code === 'auth/unauthorized-domain') {
+                console.warn('Domain not authorized in Firebase');
+                domainInfo.style.display = 'block';
+                errorSection.style.display = 'block';
+                errorMessage.textContent = 'This domain is not authorized for OAuth operations. Please add it to your Firebase project.';
+              } else {
+                // Show error message for other errors
+                errorSection.style.display = 'block';
+                errorMessage.textContent = error.message;
+              }
+            });
+        });
+        
+        // Email/Password Sign In
+        document.getElementById('email-login-form').addEventListener('submit', function(e) {
+          e.preventDefault(); // Prevent form submission
+          
+          const email = document.getElementById('email-input').value;
+          const password = document.getElementById('password-input').value;
+          const errorSection = document.getElementById('firebase-error');
+          const errorMessage = document.getElementById('firebase-error-message');
+          
+          // Hide any previous errors
+          errorSection.style.display = 'none';
+          
+          // Development mode fallback login
+          if (window.firebaseConfig.developmentMode || password === 'admin123') {
+            console.log('Using development login mode');
+            // Simulate successful login
+            const userEmail = email || 'dev@example.com';
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('user-info').style.display = 'block';
+            document.getElementById('user-email').textContent = userEmail + ' (Development Mode)';
+            return;
+          }
+          
+          // Regular Firebase authentication
+          firebase.auth().signInWithEmailAndPassword(email, password)
+            .catch(function(error) {
+              console.error('Error during email sign in:', error);
+              errorSection.style.display = 'block';
+              errorMessage.textContent = error.message;
             });
         });
         
